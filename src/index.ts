@@ -19,6 +19,17 @@ import {
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { fireproof } from "use-fireproof";
+// import { connect } from "@fireproof/cloud";
+
+const db = fireproof("my_db");
+
+/*
+connect(db, "01939d41-7c80-7d19-bb83-375dc92fc92c").then((cx) => {
+  // console.log("Connected", cx)
+});
+*/
+
 
 /**
  * Type alias for a todo object.
@@ -35,32 +46,51 @@ type Todo = {
  * Simple in-memory storage for todos.
  * In a real implementation, this would likely be backed by a database.
  */
-const todos: { [id: string]: Todo } = {
-  "1": {
-    // '01939fb0-3bf1-75ad-b011-e418967fda72': {
-    _id: '01939fb0-3bf1-75ad-b011-e418967fda72',
-    done: true,
-    text: 'Mushrooms',
-    created: 1733550947313,
-    updated: 1733550951733
-  },
-  "2": {
-    // '01939d42-24cc-7ee7-b4d9-4ff48c12dd31': {
-    _id: '01939d42-24cc-7ee7-b4d9-4ff48c12dd31',
-    done: true,
-    text: 'Beer',
-    created: 1733510177996,
-    updated: 1733550593765
-  },
-  "3": {
-    // '01939d42-1a84-702b-badc-e42f48496aeb': {
-    _id: '01939d42-1a84-702b-badc-e42f48496aeb',
-    done: true,
-    text: 'Eggs',
-    created: 1733510175364,
-    updated: 1733510183396
+const initialTodos = [
+  'Mushrooms',
+  'Bread',
+  'Eggs',
+  'Cheese'
+];
+
+const todos: { [id: string]: Todo } = {}
+
+await db.ready()
+
+setTimeout(async () => {
+  /*
+  for (const text of initialTodos) {
+    await db.put({
+      text: text,
+      done: false,
+      created: Date.now(),
+    });
   }
-};
+    */
+  const onDbEvent = async function () {
+    const run = Math.random()
+    console.error("Jim1", run)
+    const fpTodos = await db.query("created", {
+      includeDocs: true,
+      descending: true,
+      limit: 10,
+    });
+    for (let id in todos) {
+      delete todos[id]
+    }
+    console.error("Jim2", run, fpTodos.rows.length)
+    for (const row of fpTodos.rows) {
+      let todo = row.doc;
+      todos[todo!._id] = todo as Todo
+    }
+    console.error("Jim3", run, JSON.stringify(todos))
+  };
+  onDbEvent();
+  db.subscribe(onDbEvent);
+},
+  1000
+)
+
 
 /**
  * Create an MCP server with capabilities for resources (to list/read todos),
@@ -137,10 +167,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Content of the todo"
             },
-            done: {
-              type: "boolean",
-              description: "Is the todo completed?"
-            },
           },
           required: ["text", "done"]
         }
@@ -170,6 +196,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error("Text is required");
       }
 
+      /*
       const id = String(Object.keys(todos).length + 1);
       todos[id] = {
         _id: id,
@@ -178,11 +205,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         created: Date.now(),
         updated: Date.now()
       }
+        */
+      const response = await db.put({
+        text: text,
+        done: false,
+        created: Date.now(),
+      });
 
       return {
         content: [{
           type: "text",
-          text: `Created todo ${id}: ${text}`
+          text: `Created todo ${response.id}: ${text}`
         }]
       };
     }
