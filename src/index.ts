@@ -46,50 +46,27 @@ type Todo = {
  * Simple in-memory storage for todos.
  * In a real implementation, this would likely be backed by a database.
  */
-const initialTodos = [
-  'Mushrooms',
-  'Bread',
-  'Eggs',
-  'Cheese'
-];
-
 const todos: { [id: string]: Todo } = {}
 
 await db.ready()
 
-setTimeout(async () => {
-  /*
-  for (const text of initialTodos) {
-    await db.put({
-      text: text,
-      done: false,
-      created: Date.now(),
-    });
+const onDbEvent = async function () {
+  const run = Math.random()
+  const fpTodos = await db.query("created", {
+    includeDocs: true,
+    descending: true,
+    limit: 10,
+  });
+  for (let id in todos) {
+    delete todos[id]
   }
-    */
-  const onDbEvent = async function () {
-    const run = Math.random()
-    console.error("Jim1", run)
-    const fpTodos = await db.query("created", {
-      includeDocs: true,
-      descending: true,
-      limit: 10,
-    });
-    for (let id in todos) {
-      delete todos[id]
-    }
-    console.error("Jim2", run, fpTodos.rows.length)
-    for (const row of fpTodos.rows) {
-      let todo = row.doc;
-      todos[todo!._id] = todo as Todo
-    }
-    console.error("Jim3", run, JSON.stringify(todos))
-  };
-  onDbEvent();
-  db.subscribe(onDbEvent);
-},
-  1000
-)
+  for (const row of fpTodos.rows) {
+    let todo = row.doc;
+    todos[todo!._id] = todo as Todo
+  }
+};
+onDbEvent();
+db.subscribe(onDbEvent);
 
 
 /**
@@ -180,6 +157,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
         properties: {}
       },
+      {
+        name: "mark_todo_as_done",
+        description: "Mark a todo as done",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "ID of the todo"
+            },
+          },
+          required: ["id"]
+        }
+      },
     ]
   };
 });
@@ -228,6 +219,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [{
           type: "text",
           text: JSON.stringify(todos)
+        }]
+      };
+    }
+    case "mark_todo_as_done": {
+      const id = String(request.params.arguments?.id);
+      if (!id) {
+        throw new Error("ID is required");
+      }
+
+      const doc = await db.get(id);
+      console.error("Jim doc", doc);
+      // doc.done = true;
+      const response = await db.put({
+        ...doc,
+        done: true
+      });
+
+      return {
+        content: [{
+          type: "text",
+          text: `Marked todo ${response.id} as done`
         }]
       };
     }
