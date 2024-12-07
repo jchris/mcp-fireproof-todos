@@ -171,6 +171,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["id"]
         }
       },
+      {
+        name: "delete_todo",
+        description: "Delete a todo",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "ID of the todo"
+            },
+          },
+          required: ["id"]
+        }
+      },
     ]
   };
 });
@@ -187,16 +201,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error("Text is required");
       }
 
-      /*
-      const id = String(Object.keys(todos).length + 1);
-      todos[id] = {
-        _id: id,
-        done: false,
-        text: text,
-        created: Date.now(),
-        updated: Date.now()
-      }
-        */
       const response = await db.put({
         text: text,
         done: false,
@@ -229,8 +233,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       const doc = await db.get(id);
-      console.error("Jim doc", doc);
-      // doc.done = true;
       const response = await db.put({
         ...doc,
         done: true
@@ -240,6 +242,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [{
           type: "text",
           text: `Marked todo ${response.id} as done`
+        }]
+      };
+    }
+    case "delete_todo": {
+      const id = String(request.params.arguments?.id);
+      if (!id) {
+        throw new Error("ID is required");
+      }
+
+      const response = await db.del(id);
+
+      return {
+        content: [{
+          type: "text",
+          text: `Deleted todo ${response.id}`
         }]
       };
     }
