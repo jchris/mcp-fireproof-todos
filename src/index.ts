@@ -20,16 +20,8 @@ import {
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { fireproof } from "use-fireproof";
-// import { connect } from "@fireproof/cloud";
 
-const db = fireproof("my_db");
-
-/*
-connect(db, "01939d41-7c80-7d19-bb83-375dc92fc92c").then((cx) => {
-  // console.log("Connected", cx)
-});
-*/
-
+const db = fireproof("mcp_todo", { public: true });
 
 /**
  * Type alias for a todo object.
