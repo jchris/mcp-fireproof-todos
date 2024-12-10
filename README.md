@@ -31,39 +31,17 @@ You can do other fun things, like mark todos as done, as well as delete them.
 
 # Installation
 
-# Development Notes
+First, make sure you have [Node.js](https://nodejs.org/) installed.
 
+Clone the repo:
+```bash
+git clone https://github.com/jimpick/mcp-fireproof-todos.git
+```
 
----
-
-
-
-ToDo List using Fireproof
-
-This is a TypeScript-based MCP server that implements a simple notes system. It demonstrates core MCP concepts by providing:
-
-- Resources representing text notes with URIs and metadata
-- Tools for creating new notes
-- Prompts for generating summaries of notes
-
-## Features
-
-### Resources
-- List and access notes via `note://` URIs
-- Each note has a title, content and metadata
-- Plain text mime type for simple content access
-
-### Tools
-- `create_note` - Create new text notes
-  - Takes title and content as required parameters
-  - Stores note in server state
-
-### Prompts
-- `summarize_notes` - Generate a summary of all stored notes
-  - Includes all note contents as embedded resources
-  - Returns structured prompt for LLM summarization
-
-## Development
+Change directory:
+```bash
+cd mcp-fireproof-todos
+```
 
 Install dependencies:
 ```bash
@@ -75,16 +53,10 @@ Build the server:
 npm run build
 ```
 
-For development with auto-rebuild:
-```bash
-npm run watch
-```
-
-## Installation
-
 To use with Claude Desktop, add the server config:
 
 On MacOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
 On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
 
 ```json
@@ -97,12 +69,72 @@ On Windows: `%APPDATA%/Claude/claude_desktop_config.json`
 }
 ```
 
-### Debugging
 
-Since MCP servers communicate over stdio, debugging can be challenging. We recommend using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector), which is available as a package script:
+# Development Notes
 
-```bash
-npm run inspector
+Mostly, this was developed following the
+tutorial here:
+
+* https://modelcontextprotocol.io/docs/first-server/typescript
+
+Fireproof support was added:
+
+```ts
+import { fireproof } from "use-fireproof";
+
+const db = fireproof("mcp_todo", { public: true });
 ```
 
-The Inspector will provide a URL to access debugging tools in your browser.
+The fields were defined:
+
+```ts
+/**
+ * Type alias for a todo object.
+ */
+type Todo = {
+  _id: string,
+  done: boolean,
+  text: string,
+  created: Number,
+  updated: Number
+};
+```
+
+I'm keeping an in-memory list of items, which is kept updated with a `.subscribe()` method. It might have been simpler to just query the items in the "list_todos" tool.
+
+```ts
+const todos: { [id: string]: Todo } = {}
+
+await db.ready()
+
+const onDbEvent = async function () {
+  const run = Math.random()
+  const fpTodos = await db.query("created", {
+    includeDocs: true,
+    descending: true,
+    limit: 10,
+  });
+  for (let id in todos) {
+    delete todos[id]
+  }
+  for (const row of fpTodos.rows) {
+    let todo = row.doc;
+    todos[todo!._id] = todo as Todo
+  }
+};
+onDbEvent();
+db.subscribe(onDbEvent);
+```
+
+We register the following tools using `server.setRequestHandler()` with [ListToolsRequestSchema](https://github.com/jimpick/mcp-fireproof-todos/blob/8706fc409a0c122f7ee1ad42b35219a086fbd599/src/index.ts#L126):
+
+* create_todo
+* list_todos
+* mark_todo_as_done
+* delete_todo
+
+And there are simple implementations for each using `server.setRequestHandler()` with [CallToolRequestSchema](https://github.com/jimpick/mcp-fireproof-todos/blob/8706fc409a0c122f7ee1ad42b35219a086fbd599/src/index.ts#L184).
+
+# License
+
+Apache 2 or MIT
