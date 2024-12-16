@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * This is a template MCP server that implements a simple todos system.
+ * This is a template MCP server that implements Santa's wishlist system.
  * It demonstrates core MCP concepts like resources and tools by allowing:
- * - Listing todos as resources
- * - Reading individual todos
- * - Creating new todos via a tool
- * - Summarizing all todos via a prompt
+ * - Listing wishes as resources
+ * - Reading individual wishes
+ * - Creating new wishes via a tool
+ * - Summarizing all wishes via a prompt
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -21,12 +21,12 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { fireproof } from "use-fireproof";
 
-const db = fireproof("mcp_todo", { public: true });
+const db = fireproof("mcp_wishlist", { public: true });
 
 /**
- * Type alias for a todo object.
+ * Type alias for a wish object.
  */
-type Todo = {
+type Wish = {
   _id: string,
   done: boolean,
   text: string,
@@ -35,26 +35,26 @@ type Todo = {
 };
 
 /**
- * Simple in-memory storage for todos.
+ * Simple in-memory storage for wishes.
  * In a real implementation, this would likely be backed by a database.
  */
-const todos: { [id: string]: Todo } = {}
+const wishes: { [id: string]: Wish } = {}
 
 await db.ready()
 
 const onDbEvent = async function () {
   const run = Math.random()
-  const fpTodos = await db.query("created", {
+  const fpWishes = await db.query("created", {
     includeDocs: true,
     descending: true,
     limit: 10,
   });
-  for (let id in todos) {
-    delete todos[id]
+  for (let id in wishes) {
+    delete wishes[id]
   }
-  for (const row of fpTodos.rows) {
-    let todo = row.doc;
-    todos[todo!._id] = todo as Todo
+  for (const row of fpWishes.rows) {
+    let wish = row.doc;
+    wishes[wish!._id] = wish as Wish
   }
 };
 onDbEvent();
@@ -62,12 +62,12 @@ db.subscribe(onDbEvent);
 
 
 /**
- * Create an MCP server with capabilities for resources (to list/read todos),
- * tools (to create new todos), and prompts (to summarize todos).
+ * Create an MCP server with capabilities for resources (to list/read wishes),
+ * tools (to create new wishes), and prompts (to summarize wishes).
  */
 const server = new Server(
   {
-    name: "todos",
+    name: "wishlist",
     version: "0.1.0",
   },
   {
@@ -80,98 +80,98 @@ const server = new Server(
 );
 
 /**
- * Handler for listing available todos as resources.
- * Each todo is exposed as a resource with:
- * - A todo:// URI scheme
+ * Handler for listing available wishes as resources.
+ * Each wish is exposed as a resource with:
+ * - A wish:// URI scheme
  * - Plain text MIME type
- * - Human readable name and description (now including the todo title)
+ * - Human readable name and description (now including the wish title)
  */
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
-    resources: Object.entries(todos).map(([id, todo]) => ({
-      uri: `todo:///${id}`,
+    resources: Object.entries(wishes).map(([id, wish]) => ({
+      uri: `wish:///${id}`,
       mimeType: "text/plain",
-      name: todo.text,
-      description: `A text todo: ${todo.text}`
+      name: wish.text,
+      description: `A Christmas wish: ${wish.text}`
     }))
   };
 });
 
 /**
- * Handler for reading the contents of a specific todo.
- * Takes a todo:// URI and returns the todo content as plain text.
+ * Handler for reading the contents of a specific wish.
+ * Takes a wish:// URI and returns the wish content as plain text.
  */
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const url = new URL(request.params.uri);
   const id = url.pathname.replace(/^\//, '');
-  const todo = todos[id];
+  const wish = wishes[id];
 
-  if (!todo) {
-    throw new Error(`Todo ${id} not found`);
+  if (!wish) {
+    throw new Error(`Wish ${id} not found`);
   }
 
   return {
     contents: [{
       uri: request.params.uri,
       mimeType: "text/plain",
-      text: todo.text
+      text: wish.text
     }]
   };
 });
 
 /**
  * Handler that lists available tools.
- * Exposes a single "create_todo" tool that lets clients create new todos.
+ * Exposes a single "create_wish" tool that lets clients create new wishes.
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "create_todo",
-        description: "Create a new todo",
+        name: "create_wish",
+        description: "Create a new Christmas wish",
         inputSchema: {
           type: "object",
           properties: {
             text: {
               type: "string",
-              description: "Content of the todo"
+              description: "Content of the wish"
             },
           },
           required: ["text", "done"]
         }
       },
       {
-        name: "list_todos",
+        name: "list_wishes",
         description:
-          "Returns the list of todos",
+          "Returns the list of wishes",
         inputSchema: {
           type: "object",
         },
         properties: {}
       },
       {
-        name: "mark_todo_as_done",
-        description: "Mark a todo as done",
+        name: "mark_wish_as_granted",
+        description: "Mark a wish as granted",
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "ID of the todo"
+              description: "ID of the wish"
             },
           },
           required: ["id"]
         }
       },
       {
-        name: "delete_todo",
-        description: "Delete a todo",
+        name: "delete_wish",
+        description: "Delete a wish",
         inputSchema: {
           type: "object",
           properties: {
             id: {
               type: "string",
-              description: "ID of the todo"
+              description: "ID of the wish"
             },
           },
           required: ["id"]
@@ -184,10 +184,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   switch (request.params.name) {
     /**
-     * Handler for the create_todo tool.
-     * Creates a new todo with the provided text, and returns success message.
+     * Handler for the create_wish tool.
+     * Creates a new wish with the provided text, and returns success message.
      */
-    case "create_todo": {
+    case "create_wish": {
       const text = String(request.params.arguments?.text);
       if (!text) {
         throw new Error("Text is required");
@@ -202,23 +202,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [{
           type: "text",
-          text: `Created todo ${response.id}: ${text}`
+          text: `Created wish ${response.id}: ${text}`
         }]
       };
     }
     /**
-     * Handler for the list_todos tool.
-     * Returns the list of todos
+     * Handler for the list_wishes tool.
+     * Returns the list of wishes
      */
-    case "list_todos": {
+    case "list_wishes": {
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(todos)
+          text: JSON.stringify(wishes)
         }]
       };
     }
-    case "mark_todo_as_done": {
+    case "mark_wish_as_granted": {
       const id = String(request.params.arguments?.id);
       if (!id) {
         throw new Error("ID is required");
@@ -233,11 +233,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [{
           type: "text",
-          text: `Marked todo ${response.id} as done`
+          text: `Marked wish ${response.id} as granted`
         }]
       };
     }
-    case "delete_todo": {
+    case "delete_wish": {
       const id = String(request.params.arguments?.id);
       if (!id) {
         throw new Error("ID is required");
@@ -248,7 +248,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [{
           type: "text",
-          text: `Deleted todo ${response.id}`
+          text: `Deleted wish ${response.id}`
         }]
       };
     }
@@ -260,59 +260,115 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 /**
  * Handler that lists available prompts.
- * Exposes a single "summarize_todos" prompt that summarizes all todos.
+ * Exposes a single "summarize_wishes" prompt that summarizes all wishes.
  */
 server.setRequestHandler(ListPromptsRequestSchema, async () => {
   return {
     prompts: [
       {
-        name: "summarize_todos",
-        description: "Summarize all todos",
+        name: "summarize_wishes",
+        description: "Summarize all Christmas wishes",
+      },
+      {
+        name: "elf_shopping_list",
+        description: "Generate a shopping list for elves to build a specific wish",
+        parameters: {
+          type: "object",
+          properties: {
+            wish_id: {
+              type: "string",
+              description: "ID of the wish to analyze"
+            }
+          },
+          required: ["wish_id"]
+        }
       }
     ]
   };
 });
 
 /**
- * Handler for the summarize_todos prompt.
- * Returns a prompt that requests summarization of all todos, with the todos' contents embedded as resources.
+ * Handler for the summarize_wishes and elf_shopping_list prompts.
+ * Returns prompts for either summarizing all wishes or generating a shopping list for a specific wish.
  */
 server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-  if (request.params.name !== "summarize_todos") {
-    throw new Error("Unknown prompt");
-  }
+  switch (request.params.name) {
+    case "summarize_wishes": {
+      const embeddedWishes = Object.entries(wishes).map(([id, wish]) => ({
+        type: "resource" as const,
+        resource: {
+          uri: `wish:///${id}`,
+          mimeType: "text/plain",
+          text: wish.text
+        }
+      }));
 
-  const embeddedTodos = Object.entries(todos).map(([id, todo]) => ({
-    type: "resource" as const,
-    resource: {
-      uri: `todo:///${id}`,
-      mimeType: "text/plain",
-      text: todo.text
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: "Please summarize the following Christmas wishes:"
+            }
+          },
+          ...embeddedWishes.map(wish => ({
+            role: "user" as const,
+            content: wish
+          })),
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: "Provide a concise summary of all the Christmas wishes above."
+            }
+          }
+        ]
+      };
     }
-  }));
 
-  return {
-    messages: [
-      {
-        role: "user",
-        content: {
-          type: "text",
-          text: "Please summarize the following todos:"
-        }
-      },
-      ...embeddedTodos.map(todo => ({
-        role: "user" as const,
-        content: todo
-      })),
-      {
-        role: "user",
-        content: {
-          type: "text",
-          text: "Provide a concise summary of all the todos above."
-        }
+    case "elf_shopping_list": {
+      const wishId = String(request.params.arguments?.wish_id);
+      const wish = wishes[wishId];
+
+      if (!wish) {
+        throw new Error(`Wish ${wishId} not found`);
       }
-    ]
-  };
+
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: "Please analyze this Christmas wish and create a detailed shopping list for the elves:"
+            }
+          },
+          {
+            role: "user",
+            content: {
+              type: "resource",
+              resource: {
+                uri: `wish:///${wishId}`,
+                mimeType: "text/plain",
+                text: wish.text
+              }
+            }
+          },
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: "Create a shopping list with item names and estimated prices that the elves would need to build this wish. Format as a bullet point list with each item followed by its price in parentheses."
+            }
+          }
+        ]
+      };
+    }
+
+    default:
+      throw new Error("Unknown prompt");
+  }
 });
 
 /**
