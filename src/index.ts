@@ -28,6 +28,7 @@ const db = fireproof("mcp_wishlist", { public: true });
  */
 type Wish = {
   _id: string,
+  type?: string,
   done: boolean,
   text: string,
   created: Number,
@@ -35,10 +36,22 @@ type Wish = {
 };
 
 /**
- * Simple in-memory storage for wishes.
+ * Type alias for an elf shopping item
+ */
+type ElfItem = {
+  _id: string,
+  type: "elf",
+  name: string,
+  price: number,
+  wishId: string,
+  created: Number
+};
+
+/**
+ * Simple in-memory storage for wishes and elf items.
  * In a real implementation, this would likely be backed by a database.
  */
-const wishes: { [id: string]: Wish } = {}
+const wishes: { [id: string]: Wish | ElfItem } = {}
 
 await db.ready()
 
@@ -54,12 +67,11 @@ const onDbEvent = async function () {
   }
   for (const row of fpWishes.rows) {
     let wish = row.doc;
-    wishes[wish!._id] = wish as Wish
+    wishes[wish!._id] = wish as Wish | ElfItem
   }
 };
 onDbEvent();
 db.subscribe(onDbEvent);
-
 
 /**
  * Create an MCP server with capabilities for resources (to list/read wishes),
@@ -72,9 +84,9 @@ const server = new Server(
   },
   {
     capabilities: {
-      resources: {},
-      tools: {},
-      prompts: {},
+      resources: { enabled: true },
+      tools: { enabled: true },
+      prompts: { enabled: true }  // Make it explicitly enabled
     },
   }
 );
@@ -91,8 +103,8 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
     resources: Object.entries(wishes).map(([id, wish]) => ({
       uri: `wish:///${id}`,
       mimeType: "text/plain",
-      name: wish.text,
-      description: `A Christmas wish: ${wish.text}`
+      name: 'text' in wish ? wish.text : wish.name,
+      description: 'text' in wish ? `A Christmas wish: ${wish.text}` : `An elf shopping item: ${wish.name} ($${wish.price})`
     }))
   };
 });
@@ -107,21 +119,21 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const wish = wishes[id];
 
   if (!wish) {
-    throw new Error(`Wish ${id} not found`);
+    throw new Error(`Item ${id} not found`);
   }
 
   return {
     contents: [{
       uri: request.params.uri,
       mimeType: "text/plain",
-      text: wish.text
+      text: 'text' in wish ? wish.text : `${wish.name} ($${wish.price})`
     }]
   };
 });
 
 /**
  * Handler that lists available tools.
- * Exposes a single "create_wish" tool that lets clients create new wishes.
+ * Exposes tools for creating wishes and elf shopping items.
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -141,6 +153,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
+        name: "create_elf_item",
+        description: "Create a new elf shopping item",
+        inputSchema: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "Name of the item"
+            },
+            price: {
+              type: "number",
+              description: "Price of the item"
+            },
+            wishId: {
+              type: "string",
+              description: "ID of the associated wish"
+            }
+          },
+          required: ["name", "price", "wishId"]
+        }
+      },
+      {
         name: "list_wishes",
         description:
           "Returns the list of wishes",
@@ -148,6 +182,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
         },
         properties: {}
+      },
+      { 
+        name: "elf_shopping_list",
+        description: "Generate a shopping list for elves to build a specific wish",
+        inputSchema: {
+          type: "object",
+          properties: {
+            wish_id: {
+              type: "string",
+              description: "ID of the wish to analyze"
+            }
+          },
+          required: ["wish_id"]
+        }
       },
       {
         name: "mark_wish_as_granted",
@@ -206,6 +254,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }]
       };
     }
+
+    /**
+     * Handler for the create_elf_item tool.
+     * Creates a new elf shopping item with name, price and associated wish.
+     */
+    case "create_elf_item": {
+      const name = String(request.params.arguments?.name);
+      const price = Number(request.params.arguments?.price);
+      const wishId = String(request.params.arguments?.wishId);
+
+      if (!name || !price || !wishId) {
+        throw new Error("Name, price and wishId are required");
+      }
+
+      const response = await db.put({
+        type: "elf",
+        name,
+        price,
+        wishId,
+        created: Date.now(),
+      });
+
+      return {
+        content: [{
+          type: "text",
+          text: `Created elf item ${response.id}: ${name} ($${price})`
+        }]
+      };
+    }
+
     /**
      * Handler for the list_wishes tool.
      * Returns the list of wishes
@@ -263,6 +341,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
  * Exposes a single "summarize_wishes" prompt that summarizes all wishes.
  */
 server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  console.log("Listing prompts...");
   return {
     prompts: [
       {
@@ -299,7 +378,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
         resource: {
           uri: `wish:///${id}`,
           mimeType: "text/plain",
-          text: wish.text
+          text: 'text' in wish ? wish.text : `${wish.name} ($${wish.price})`
         }
       }));
 
@@ -331,7 +410,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
       const wishId = String(request.params.arguments?.wish_id);
       const wish = wishes[wishId];
 
-      if (!wish) {
+      if (!wish || !('text' in wish)) {
         throw new Error(`Wish ${wishId} not found`);
       }
 
